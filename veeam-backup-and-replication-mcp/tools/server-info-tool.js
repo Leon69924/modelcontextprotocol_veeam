@@ -1,11 +1,7 @@
 // tools/server-info-tool.js
 import fetch from "node-fetch";
-import https from "https";
-
-// Create an HTTPS agent that ignores self-signed certificates
-const httpsAgent = new https.Agent({
-  rejectUnauthorized: false
-});
+import { httpsAgent } from "./shared/https-agent.js";
+import { getAuth, notAuthenticatedResponse } from "./shared/auth-store.js";
 
 export default function(server) {
   // Add server info tool
@@ -14,19 +10,12 @@ export default function(server) {
     { },
     async () => {
       try {
-        if (!global.vbrAuth) {
-          return {
-            content: [{ 
-              type: "text", 
-              text: "Not authenticated. Please call auth-vbr tool first." 
-            }],
-            isError: true
-          };
-        }
-        
-        const { host, token } = global.vbrAuth;
-        
-        const response = await fetch(`https://${host}:9419/api/v1/serverInfo`, {
+        const auth = getAuth();
+        if (!auth) return notAuthenticatedResponse();
+
+        const { host, port, token } = auth;
+
+        const response = await fetch(`https://${host}:${port}/api/v1/serverInfo`, {
           method: 'GET',
           headers: {
             'accept': 'application/json',
@@ -35,24 +24,24 @@ export default function(server) {
           },
           agent: httpsAgent
         });
-        
+
         if (!response.ok) {
           throw new Error(`Failed to fetch server info: ${response.statusText}`);
         }
-        
+
         const serverInfo = await response.json();
-        
+
         return {
-          content: [{ 
-            type: "text", 
+          content: [{
+            type: "text",
             text: JSON.stringify(serverInfo, null, 2)
           }]
         };
       } catch (error) {
         return {
-          content: [{ 
-            type: "text", 
-            text: `Error fetching server info: ${error.message}` 
+          content: [{
+            type: "text",
+            text: `Error fetching server info: ${error.message}`
           }],
           isError: true
         };

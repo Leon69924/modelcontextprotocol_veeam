@@ -1,11 +1,7 @@
 import fetch from "node-fetch";
-import https from "https";
+import { httpsAgent } from "./shared/https-agent.js";
+import { getAuth, notAuthenticatedResponse } from "./shared/auth-store.js";
 import { z } from "zod";
-
-// Create an HTTPS agent that ignores self-signed certificates
-const httpsAgent = new https.Agent({
-  rejectUnauthorized: false
-});
 
 export default function (server) {
   // Add protection groups tool
@@ -17,20 +13,13 @@ export default function (server) {
     },
     async (params) => {
       try {
-        if (!global.vbrAuth) {
-          return {
-            content: [{
-              type: "text",
-              text: "Not authenticated. Please call auth-vbr tool first."
-            }],
-            isError: true
-          };
-        }
+        const auth = getAuth();
+        if (!auth) return notAuthenticatedResponse();
 
-        const { host, token } = global.vbrAuth;
+        const { host, port, token } = auth;
         const { limit = 200, skip = 0 } = params;
 
-        const response = await fetch(`https://${host}:9419/api/v1/agents/protectionGroups?limit=${limit}&skip=${skip}`, {
+        const response = await fetch(`https://${host}:${port}/api/v1/agents/protectionGroups?limit=${limit}&skip=${skip}`, {
           method: 'GET',
           headers: {
             'accept': 'application/json',

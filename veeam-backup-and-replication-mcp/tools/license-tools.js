@@ -1,11 +1,7 @@
 // tools/license-tools.js
 import fetch from "node-fetch";
-import https from "https";
-
-// Create an HTTPS agent that ignores self-signed certificates
-const httpsAgent = new https.Agent({
-  rejectUnauthorized: false
-});
+import { httpsAgent } from "./shared/https-agent.js";
+import { getAuth, notAuthenticatedResponse } from "./shared/auth-store.js";
 
 export default function(server) {
   // Add licensing information tool
@@ -14,19 +10,12 @@ export default function(server) {
     { },
     async () => {
       try {
-        if (!global.vbrAuth) {
-          return {
-            content: [{ 
-              type: "text", 
-              text: "Not authenticated. Please call auth-vbr tool first." 
-            }],
-            isError: true
-          };
-        }
-        
-        const { host, token } = global.vbrAuth;
-        
-        const response = await fetch(`https://${host}:9419/api/v1/license`, {
+        const auth = getAuth();
+        if (!auth) return notAuthenticatedResponse();
+
+        const { host, port, token } = auth;
+
+        const response = await fetch(`https://${host}:${port}/api/v1/license`, {
           method: 'GET',
           headers: {
             'accept': 'application/json',
@@ -35,13 +24,13 @@ export default function(server) {
           },
           agent: httpsAgent
         });
-        
+
         if (!response.ok) {
           throw new Error(`Failed to fetch license info: ${response.statusText}`);
         }
-        
+
         const licenseData = await response.json();
-        
+
         // Format the license data for better readability
         const formattedLicense = {
           status: licenseData.status,
@@ -56,18 +45,18 @@ export default function(server) {
           },
           supportExpirationDate: licenseData.supportExpirationDate
         };
-        
+
         return {
-          content: [{ 
-            type: "text", 
+          content: [{
+            type: "text",
             text: JSON.stringify(formattedLicense, null, 2)
           }]
         };
       } catch (error) {
         return {
-          content: [{ 
-            type: "text", 
-            text: `Error fetching license info: ${error.message}` 
+          content: [{
+            type: "text",
+            text: `Error fetching license info: ${error.message}`
           }],
           isError: true
         };
@@ -81,19 +70,12 @@ export default function(server) {
     { },
     async () => {
       try {
-        if (!global.vbrAuth) {
-          return {
-            content: [{ 
-              type: "text", 
-              text: "Not authenticated. Please call auth-vbr tool first." 
-            }],
-            isError: true
-          };
-        }
-        
-        const { host, token } = global.vbrAuth;
-        
-        const response = await fetch(`https://${host}:9419/api/v1/license`, {
+        const auth = getAuth();
+        if (!auth) return notAuthenticatedResponse();
+
+        const { host, port, token } = auth;
+
+        const response = await fetch(`https://${host}:${port}/api/v1/license`, {
           method: 'GET',
           headers: {
             'accept': 'application/json',
@@ -102,16 +84,16 @@ export default function(server) {
           },
           agent: httpsAgent
         });
-        
+
         if (!response.ok) {
           throw new Error(`Failed to fetch license info: ${response.statusText}`);
         }
-        
+
         const licenseData = await response.json();
-        
+
         // Get the workload data only
         const workloads = licenseData.instanceLicenseSummary?.workload || [];
-        
+
         // Group workloads by type
         const workloadsByType = {};
         workloads.forEach(workload => {
@@ -120,18 +102,18 @@ export default function(server) {
           }
           workloadsByType[workload.type].push(workload);
         });
-        
+
         return {
-          content: [{ 
-            type: "text", 
+          content: [{
+            type: "text",
             text: JSON.stringify(workloadsByType, null, 2)
           }]
         };
       } catch (error) {
         return {
-          content: [{ 
-            type: "text", 
-            text: `Error fetching license workloads: ${error.message}` 
+          content: [{
+            type: "text",
+            text: `Error fetching license workloads: ${error.message}`
           }],
           isError: true
         };

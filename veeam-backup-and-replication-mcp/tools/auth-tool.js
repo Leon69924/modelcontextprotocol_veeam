@@ -1,77 +1,77 @@
 // tools/auth-tool.js
 import fetch from "node-fetch";
-import https from "https";
-import { z } from "zod";
+import dotenv from "dotenv";
+import { httpsAgent } from "./shared/https-agent.js";
+import { setAuth } from "./shared/auth-store.js";
 
-// Create an HTTPS agent that ignores self-signed certificates
-const httpsAgent = new https.Agent({
-  rejectUnauthorized: false
-});
+dotenv.config();
 
-// Hardcoded credentials
-const DEFAULT_HOST = "YOURIIPORFQDN";
-const DEFAULT_USERNAME = ".\\YOURLOCALUSER";
-const DEFAULT_PASSWORD = "YOURPASS";
+const DEFAULT_HOST = process.env.VEEAM_HOST;
+const DEFAULT_USERNAME = process.env.VEEAM_USERNAME;
+const DEFAULT_PASSWORD = process.env.VEEAM_PASSWORD;
+const DEFAULT_PORT = process.env.VEEAM_PORT || "9419";
+const DEFAULT_API_VERSION = process.env.VEEAM_API_VERSION || "1.2-rev0";
 
-// Authentication function that gets a token from VBR
-async function authenticate(host, username, password) {
-  try {
-    const response = await fetch(`https://${host}:9419/api/oauth2/token`, {
-      method: 'POST',
-      headers: {
-        'accept': 'application/json',
-        'x-api-version': '1.2-rev0',
-        'Content-Type': 'application/x-www-form-urlencoded'
-      },
-      body: `grant_type=password&username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}&refresh_token=&code=&use_short_term_refresh=&vbr_token=`,
-      agent: httpsAgent
-    });
-    
-    if (!response.ok) {
-      throw new Error(`Authentication failed: ${response.statusText}`);
-    }
-    
-    const data = await response.json();
-    return data.access_token;
-  } catch (error) {
-    throw error;
+async function authenticate(host, username, password, port, apiVersion) {
+  const response = await fetch(`https://${host}:${port}/api/oauth2/token`, {
+    method: 'POST',
+    headers: {
+      'accept': 'application/json',
+      'x-api-version': apiVersion,
+      'Content-Type': 'application/x-www-form-urlencoded'
+    },
+    body: `grant_type=password&username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}&refresh_token=&code=&use_short_term_refresh=&vbr_token=`,
+    agent: httpsAgent
+  });
+
+  if (!response.ok) {
+    throw new Error(`Authentication failed: ${response.statusText}`);
   }
+
+  const data = await response.json();
+  if (!data.access_token) {
+    throw new Error("No access token received from VBR server");
+  }
+  return data.access_token;
 }
 
 export default function(server) {
   server.tool(
     "auth-vbr",
-    {
-      // All parameters optional
-      host: z.string().describe("VBR server hostname or IP").optional(),
-      username: z.string().describe("Username in domain\\user format").optional(),
-      password: z.string().describe("Password").optional()
-    },
-    async (params = {}) => {
+    {},
+    async () => {
       try {
-        const host = params.host || DEFAULT_HOST;
-        const username = params.username || DEFAULT_USERNAME;
-        const password = params.password || DEFAULT_PASSWORD;
-        
-        const token = await authenticate(host, username, password);
-        
-        // Store the token and host in a global variable for other tools to use
-        global.vbrAuth = {
-          host,
-          token
-        };
-        
+        const host = DEFAULT_HOST;
+        const username = DEFAULT_USERNAME;
+        const password = DEFAULT_PASSWORD;
+        const port = DEFAULT_PORT;
+        const apiVersion = DEFAULT_API_VERSION;
+
+        if (!host) {
+          throw new Error("Host not configured. Set VEEAM_HOST environment variable.");
+        }
+        if (!username) {
+          throw new Error("Username not configured. Set VEEAM_USERNAME environment variable.");
+        }
+        if (!password) {
+          throw new Error("Password not configured. Set VEEAM_PASSWORD environment variable.");
+        }
+
+        const token = await authenticate(host, username, password, port, apiVersion);
+
+        setAuth({ host, port, token, apiVersion });
+
         return {
-          content: [{ 
-            type: "text", 
-            text: `Authentication successful. Connected to ${host}. Token received and stored for subsequent API calls.` 
+          content: [{
+            type: "text",
+            text: `Authentication successful. Connected to ${host}:${port}. Token received and stored for subsequent API calls.`
           }]
         };
       } catch (error) {
         return {
-          content: [{ 
-            type: "text", 
-            text: `Authentication failed: ${error.message}` 
+          content: [{
+            type: "text",
+            text: `Authentication failed: ${error.message}`
           }],
           isError: true
         };

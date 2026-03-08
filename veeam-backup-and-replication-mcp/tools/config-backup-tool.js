@@ -1,32 +1,21 @@
 import fetch from "node-fetch";
-import https from "https";
+import { httpsAgent } from "./shared/https-agent.js";
+import { getAuth, notAuthenticatedResponse } from "./shared/auth-store.js";
 import { z } from "zod";
-
-// Create an HTTPS agent that ignores self-signed certificates
-const httpsAgent = new https.Agent({
-    rejectUnauthorized: false
-});
 
 export default function (server) {
     // Tool: get_config_backup
     server.tool(
         "get-config-backup",
         {},
-        async (params) => {
+        async () => {
             try {
-                if (!global.vbrAuth) {
-                    return {
-                        content: [{
-                            type: "text",
-                            text: "Not authenticated. Please call auth-vbr tool first."
-                        }],
-                        isError: true
-                    };
-                }
+                const auth = getAuth();
+                if (!auth) return notAuthenticatedResponse();
 
-                const { host, token } = global.vbrAuth;
+                const { host, port, token } = auth;
 
-                const response = await fetch(`https://${host}:9419/api/v1/configBackup`, {
+                const response = await fetch(`https://${host}:${port}/api/v1/configBackup`, {
                     method: 'GET',
                     headers: {
                         'accept': 'application/json',
@@ -85,15 +74,8 @@ export default function (server) {
         },
         async (params) => {
             try {
-                if (!global.vbrAuth) {
-                    return {
-                        content: [{
-                            type: "text",
-                            text: "Not authenticated. Please call auth-vbr tool first."
-                        }],
-                        isError: true
-                    };
-                }
+                const auth = getAuth();
+                if (!auth) return notAuthenticatedResponse();
 
                 if (params.confirmation !== true) {
                     return {
@@ -105,9 +87,9 @@ export default function (server) {
                     };
                 }
 
-                const { host, token } = global.vbrAuth;
+                const { host, port, token } = auth;
 
-                const response = await fetch(`https://${host}:9419/api/v1/configBackup/backup`, {
+                const response = await fetch(`https://${host}:${port}/api/v1/configBackup/backup`, {
                     method: 'POST',
                     headers: {
                         'accept': 'application/json',
@@ -122,7 +104,7 @@ export default function (server) {
                 }
 
                 // POST to this endpoint typically returns 202 or 200 with no body or a task ID?
-                // Documentation says "Start Configuration Backup", does not specify key response body for POST in the brief, 
+                // Documentation says "Start Configuration Backup", does not specify key response body for POST in the brief,
                 // usually it returns empty or a task. Let's assume standard success for now or text.
                 // If there's a body we'll try to parse it, otherwise success message.
 

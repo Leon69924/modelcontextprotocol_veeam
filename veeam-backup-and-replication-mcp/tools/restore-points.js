@@ -1,11 +1,7 @@
 import fetch from "node-fetch";
-import https from "https";
+import { httpsAgent } from "./shared/https-agent.js";
+import { getAuth, notAuthenticatedResponse } from "./shared/auth-store.js";
 import { z } from "zod";
-
-// Create an HTTPS agent that ignores self-signed certificates
-const httpsAgent = new https.Agent({
-    rejectUnauthorized: false
-});
 
 export default function (server) {
     // Add restore points tool
@@ -23,17 +19,10 @@ export default function (server) {
         },
         async (params) => {
             try {
-                if (!global.vbrAuth) {
-                    return {
-                        content: [{
-                            type: "text",
-                            text: "Not authenticated. Please call auth-vbr tool first."
-                        }],
-                        isError: true
-                    };
-                }
+                const auth = getAuth();
+                if (!auth) return notAuthenticatedResponse();
 
-                const { host, token } = global.vbrAuth;
+                const { host, port, token } = auth;
                 const { id, limit = 200, skip = 0, ...filters } = params;
 
                 // Build query string
@@ -50,7 +39,7 @@ export default function (server) {
                     queryParams.append('orderAsc', filters.orderAsc.toString());
                 }
 
-                const response = await fetch(`https://${host}:9419/api/v1/backupObjects/${id}/restorePoints?${queryParams.toString()}`, {
+                const response = await fetch(`https://${host}:${port}/api/v1/backupObjects/${id}/restorePoints?${queryParams.toString()}`, {
                     method: 'GET',
                     headers: {
                         'accept': 'application/json',
@@ -74,7 +63,7 @@ export default function (server) {
 
                 await Promise.all(backupIds.map(async (backupId) => {
                     try {
-                        const backupResponse = await fetch(`https://${host}:9419/api/v1/backups/${backupId}`, {
+                        const backupResponse = await fetch(`https://${host}:${port}/api/v1/backups/${backupId}`, {
                             method: 'GET',
                             headers: {
                                 'accept': 'application/json',
